@@ -23,7 +23,7 @@ echo "=============================================="
 echo ""
 
 # -------------------------------
-# ✅ DNS Confirmation (Your Requirement)
+# ✅ DNS Confirmation
 # -------------------------------
 read -p "❓ Did you add your SERVER IP in Linode DNS (A record) for $DOMAIN ? (y/n): " DNS_OK
 
@@ -40,6 +40,11 @@ if [[ "$DNS_OK" != "y" && "$DNS_OK" != "Y" ]]; then
   exit 1
 fi
 
+# -------------------------------
+# ✅ Ask if ports should be blocked
+# -------------------------------
+read -p "🔒 Do you want to BLOCK public access to Odoo ports ${ODOO_PORT} & ${CHAT_PORT}? (Recommended) (y/n): " BLOCK_OK
+
 echo ""
 echo "✅ DNS confirmed. Continuing setup..."
 echo ""
@@ -55,7 +60,19 @@ sudo apt install -y nginx ufw
 # -------------------------------
 sudo ufw allow 'Nginx Full'
 sudo ufw allow OpenSSH
+
+if [[ "$BLOCK_OK" == "y" || "$BLOCK_OK" == "Y" ]]; then
+  echo "✅ Blocking public access to ports ${ODOO_PORT} & ${CHAT_PORT}..."
+  sudo ufw deny ${ODOO_PORT}/tcp || true
+  sudo ufw deny ${CHAT_PORT}/tcp || true
+else
+  echo "⚠️ Keeping ports ${ODOO_PORT} & ${CHAT_PORT} open (not recommended)."
+  sudo ufw allow ${ODOO_PORT}/tcp || true
+  sudo ufw allow ${CHAT_PORT}/tcp || true
+fi
+
 sudo ufw --force enable
+sudo ufw status
 
 # -------------------------------
 # 3) Enable Nginx
