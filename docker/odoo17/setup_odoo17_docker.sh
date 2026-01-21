@@ -94,10 +94,13 @@ EOF
 # -------------------------------
 # 4) Create config/odoo.conf
 # -------------------------------
+read -p "Enter Odoo Master Password (admin_passwd) [default: admin123]: " MASTER_PASS
+MASTER_PASS=${MASTER_PASS:-admin123}
+
 echo "✅ Creating config/odoo.conf..."
 cat <<EOF > config/odoo.conf
 [options]
-admin_passwd = Master@Boards123
+admin_passwd = ${MASTER_PASS}
 proxy_mode = True
 longpolling_port = 8072
 
@@ -108,8 +111,8 @@ workers = 2
 max_cron_threads = 1
 
 ; ✅ Logs (optional)
-logfile = /mnt/log/odoo17.log
-log_level = info
+;logfile = /mnt/log/odoo17.log
+;log_level = info
 EOF
 
 # -------------------------------
