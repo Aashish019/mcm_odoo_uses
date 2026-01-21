@@ -1,10 +1,9 @@
 #!/bin/bash
-set -e
 
 BASE_DIR="/root/deployment/odoo-19/config/docker"
 
 echo "=============================================="
-echo "   ✅ Odoo 19 Docker Full Setup Script"
+echo "✅ Odoo 19 Docker Full Setup + Addons Clone"
 echo "=============================================="
 
 # -------------------------------
@@ -20,18 +19,22 @@ echo "✅ Enabling Docker..."
 sudo systemctl enable docker
 sudo systemctl start docker
 
-echo "✅ Installing Docker Compose plugin..."
-sudo apt install -y docker-compose-plugin
+echo "✅ Installing Docker Compose ..."
+sudo apt install -y docker-compose
+docker-compose --version
+
+echo "✅ Installing Git..."
+sudo apt install -y git
 
 # -------------------------------
 # 2) Create folders
 # -------------------------------
 echo "✅ Creating folders..."
 sudo mkdir -p "$BASE_DIR"/{config,addons,logs,backups}
-cd "$BASE_DIR"
+cd "$BASE_DIR" || exit 1
 
 # -------------------------------
-# 3) Create docker-compose.yml
+# 3) Create docker-compose.yml (YOUR SAME FILE)
 # -------------------------------
 echo "✅ Creating docker-compose.yml..."
 cat <<EOF > docker-compose.yml
@@ -86,7 +89,7 @@ volumes:
 EOF
 
 # -------------------------------
-# 4) Create config/odoo.conf
+# 4) Create config/odoo.conf (YOUR SAME CONF)
 # -------------------------------
 echo "✅ Creating config/odoo.conf..."
 cat <<EOF > config/odoo.conf
@@ -101,10 +104,75 @@ max_cron_threads = 1
 EOF
 
 # -------------------------------
-# 5) Run containers
+# 5) Confirm GitHub SSH Key BEFORE cloning SSH repos
+# -------------------------------
+echo ""
+echo "=============================================="
+echo "⚠️ GitHub SSH Key Check (for MCM private repos)"
+echo "=============================================="
+read -p "Did you already add GitHub SSH key in this server? (y/n): " SSH_OK
+
+if [[ "$SSH_OK" != "y" && "$SSH_OK" != "Y" ]]; then
+  echo ""
+  echo "❌ Aborting addon clone because SSH key is not configured."
+  echo ""
+  echo "✅ Run this command to create SSH key:"
+  echo 'ssh-keygen -t ed25519 -C "shameer@mcmwg.com"'
+  echo ""
+  echo "✅ Then add the public key to GitHub:"
+  echo "cat ~/.ssh/id_ed25519.pub"
+  echo ""
+  exit 1
+fi
+
+# -------------------------------
+# 6) Clone addons inside addons/
+# -------------------------------
+echo "✅ Moving to addons folder and cloning repositories..."
+cd "$BASE_DIR/addons" || exit 1
+
+declare -A REPOS=(
+    ["Cybrosys"]="https://github.com/CybroOdoo/CybroAddons https://github.com/CybroOdoo/OpenHRMS"
+    ["mcm"]="git@github.com:McMillan-Woods-Global/odoo_enterprise_addons.git git@github.com:McMillan-Woods-Global/mcm_gen_modules.git git@github.com:McMillan-Woods-Global/mcm_subscription_alert.git"
+    ["oca"]="https://github.com/OCA/account-financial-reporting https://github.com/OCA/account-financial-tools https://github.com/OCA/account-invoicing https://github.com/OCA/account-payment https://github.com/OCA/account-reconcile https://github.com/OCA/reporting-engine https://github.com/OCA/sale-workflow https://github.com/OCA/server-tools https://github.com/OCA/server-ux https://github.com/OCA/web"
+    ["odoo-mates"]="https://github.com/odoomates/odooapps"
+    ["others"]="https://github.com/muhlhel/myfree"
+)
+
+clone_repo() {
+    local repo="$1"
+    local repo_name
+    repo_name=$(basename "$repo" .git)
+
+    if [ -d "$repo_name" ]; then
+        echo "⚠️ Already exists, skipping: $repo_name"
+        return 0
+    fi
+
+    echo "⬇️ Cloning $repo_name (branch 19.0)..."
+    git clone -b 19.0 --single-branch "$repo"
+}
+
+for category in "${!REPOS[@]}"; do
+    echo "📁 Creating folder: $category"
+    mkdir -p "$category"
+    cd "$category" || exit 1
+
+    for repo in ${REPOS[$category]}; do
+        clone_repo "$repo"
+    done
+
+    cd ..
+done
+
+echo "✅ All repositories cloned successfully!"
+
+# -------------------------------
+# 7) Start Containers
 # -------------------------------
 echo "✅ Starting Odoo 19 containers..."
-docker compose up -d
+cd "$BASE_DIR" || exit 1
+docker-compose up -d
 
 echo "=============================================="
 echo "✅ DONE! Odoo 19 is running"
