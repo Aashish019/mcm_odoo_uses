@@ -1,52 +1,94 @@
 #!/bin/bash
+set -e
 
 BASE_DIR="/root/deployment/odoo-19/config/docker"
 
+# ✅ Odoo 19 custom ports (your existing setup)
+ODOO_PORT="4101"
+LONGPOLL_PORT="4102"
+DB_EXPOSE_PORT="5101"
+POSTGRES_VERSION="16"
+
+ODOO_CONTAINER="odoo19-web"
+DB_CONTAINER="odoo19-db"
+
+PUBLIC_IP=$(ip -4 route get 1.1.1.1 | awk '{print $7}')
+
 echo "=============================================="
-echo "✅ Odoo 19 Docker Full Setup + Addons Clone"
+echo "✅ Odoo 19 Docker Setup (Safe to run multiple times)"
+echo "Base Dir : $BASE_DIR"
+echo "Ports    : Odoo=${ODOO_PORT}, Longpoll=${LONGPOLL_PORT}, DB=${DB_EXPOSE_PORT}"
+echo "ServerIP : ${PUBLIC_IP}"
 echo "=============================================="
 
 # -------------------------------
-# 1) Install Docker + Compose
+# ✅ Helper functions
 # -------------------------------
-echo "✅ Updating system..."
+command_exists() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+install_if_missing() {
+  local pkg="$1"
+  dpkg -s "$pkg" >/dev/null 2>&1 || sudo apt install -y "$pkg"
+}
+
+# -------------------------------
+# 1) Install Docker + Compose + Git (only if missing)
+# -------------------------------
+echo "✅ Checking required packages..."
 sudo apt update -y
 
-echo "✅ Installing Docker..."
-sudo apt install -y docker.io
+if ! command_exists docker; then
+  echo "📦 Installing Docker..."
+  install_if_missing docker.io
+  sudo systemctl enable docker
+  sudo systemctl start docker
+else
+  echo "✅ Docker already installed. Skipping..."
+fi
 
-echo "✅ Enabling Docker..."
-sudo systemctl enable docker
-sudo systemctl start docker
+# ✅ We use docker-compose command (hyphen) since plugin may not exist
+if ! command_exists docker-compose; then
+  echo "📦 Installing docker-compose..."
+  install_if_missing docker-compose
+else
+  echo "✅ docker-compose already installed. Skipping..."
+fi
 
-echo "✅ Installing Docker Compose ..."
-sudo apt install -y docker-compose
-docker-compose --version
-
-echo "✅ Installing Git..."
-sudo apt install -y git
+if ! command_exists git; then
+  echo "📦 Installing Git..."
+  install_if_missing git
+else
+  echo "✅ Git already installed. Skipping..."
+fi
 
 # -------------------------------
-# 2) Create folders
+# 2) Create folder structure (safe)
 # -------------------------------
-echo "✅ Creating folders..."
+echo "✅ Ensuring folder structure exists..."
 sudo mkdir -p "$BASE_DIR"/{config,addons,logs,backups}
 cd "$BASE_DIR" || exit 1
 
 # -------------------------------
-# 3) Create docker-compose.yml (YOUR SAME FILE)
+# 3) Create docker-compose.yml only if missing
 # -------------------------------
-echo "✅ Creating docker-compose.yml..."
-cat <<EOF > docker-compose.yml
+if [ -f "$BASE_DIR/docker-compose.yml" ]; then
+  echo "✅ docker-compose.yml already exists. Keeping existing file."
+else
+  echo "✅ Creating docker-compose.yml..."
+  cat <<EOF > docker-compose.yml
+version: "3.8"
+
 services:
   web:
     image: odoo:19.0
-    container_name: odoo19-web
+    container_name: ${ODOO_CONTAINER}
     depends_on:
       - db
     ports:
-      - "4101:8069"
-      - "4102:8072"
+      - "${ODOO_PORT}:8069"
+      - "${LONGPOLL_PORT}:8072"
     restart: unless-stopped
     networks:
       - odoo_network
@@ -65,10 +107,10 @@ services:
       - ./backups:/mnt/backup
 
   db:
-    image: postgres:16
-    container_name: odoo19-db
+    image: postgres:${POSTGRES_VERSION}
+    container_name: ${DB_CONTAINER}
     ports:
-      - "5101:5432"
+      - "${DB_EXPOSE_PORT}:5432"
     restart: unless-stopped
     networks:
       - odoo_network
@@ -77,7 +119,7 @@ services:
       POSTGRES_USER: odoo
       POSTGRES_PASSWORD: odoo
     volumes:
-      - odoo-db-data-16:/var/lib/postgresql/data
+      - odoo-db-data-${POSTGRES_VERSION}:/var/lib/postgresql/data
 
 networks:
   odoo_network:
@@ -85,104 +127,128 @@ networks:
 
 volumes:
   odoo-web-data-19:
-  odoo-db-data-16:
+  odoo-db-data-${POSTGRES_VERSION}:
 EOF
+fi
 
 # -------------------------------
-# 4) Create config/odoo.conf (YOUR SAME CONF)
+# 4) Create config/odoo.conf only if missing
 # -------------------------------
-read -p "Enter Odoo Master Password (admin_passwd) [default: admin123]: " MASTER_PASS
-MASTER_PASS=${MASTER_PASS:-admin123}
+if [ -f "$BASE_DIR/config/odoo.conf" ]; then
+  echo "✅ config/odoo.conf already exists. Keeping existing file."
+else
+  read -p "Enter Odoo Master Password (admin_passwd) [default: admin123]: " MASTER_PASS
+  MASTER_PASS=${MASTER_PASS:-admin123}
 
-echo "✅ Creating config/odoo.conf..."
-cat <<EOF > config/odoo.conf
+  echo "✅ Creating config/odoo.conf..."
+  cat <<EOF > config/odoo.conf
 [options]
 admin_passwd = ${MASTER_PASS}
 proxy_mode = True
 longpolling_port = 8072
 ;gevent_port = False
-addons_path = /usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons/Cybrosys/CybroAddons,/mnt/extra-addons/Cybrosys/OpenHRMS,/mnt/extra-addons/mcm/mcm_gen_modules,/mnt/extra-addons/mcm/mcm_subscription_alert,/mnt/extra-addons/mcm/odoo_enterprise_addons,/mnt/extra-addons/oca/account-financial-reporting,/mnt/extra-addons/oca/account-financial-tools,/mnt/extra-addons/oca/account-invoicing,/mnt/extra-addons/oca/account-payment,/mnt/extra-addons/oca/account-reconcile,/mnt/extra-addons/oca/reporting-engine,/mnt/extra-addons/oca/sale-workflow,/mnt/extra-addons/oca/server-tools,/mnt/extra-addons/oca/server-ux,/mnt/extra-addons/oca/web,/mnt/extra-addons/odoo-mates/odooapps,/mnt/extra-addons/others/myfree
+
+addons_path = /usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons/mcm/mcmillan_internal_addons,/mnt/extra-addons/mcm/mcm_gen_modules,/mnt/extra-addons/oca/web,/mnt/extra-addons/odoo-mates,/mnt/extra-addons/mcm/odoo_enterprise_addons,/mnt/extra-addons/Cybrosys/CybroAddons,/mnt/extra-addons/Cybrosys/OpenHRMS,/mnt/extra-addons/mcm/mcm_subscription_alert
 
 workers = 2
 max_cron_threads = 1
+
+logfile = /mnt/log/odoo19.log
+log_level = info
 EOF
-
-# -------------------------------
-# 5) Confirm GitHub SSH Key BEFORE cloning SSH repos
-# -------------------------------
-echo ""
-echo "=============================================="
-echo "⚠️ GitHub SSH Key Check (for MCM private repos)"
-echo "=============================================="
-read -p "Did you already add GitHub SSH key in this server? (y/n): " SSH_OK
-
-if [[ "$SSH_OK" != "y" && "$SSH_OK" != "Y" ]]; then
-  echo ""
-  echo "❌ Aborting addon clone because SSH key is not configured."
-  echo ""
-  echo "✅ Run this command to create SSH key:"
-  echo 'ssh-keygen -t ed25519 -C "shameer@mcmwg.com"'
-  echo ""
-  echo "✅ Then add the public key to GitHub:"
-  echo "cat ~/.ssh/id_ed25519.pub"
-  echo ""
-  exit 1
 fi
 
 # -------------------------------
-# 6) Clone addons inside addons/
+# 5) SSH key check only if MCM repos missing
 # -------------------------------
-echo "✅ Moving to addons folder and cloning repositories..."
 cd "$BASE_DIR/addons" || exit 1
 
+NEED_MCM_CLONE=0
+if [ ! -d "$BASE_DIR/addons/mcm/odoo_enterprise_addons" ] || \
+   [ ! -d "$BASE_DIR/addons/mcm/mcm_gen_modules" ] || \
+   [ ! -d "$BASE_DIR/addons/mcm/mcm_subscription_alert" ]; then
+  NEED_MCM_CLONE=1
+fi
+
+if [ "$NEED_MCM_CLONE" -eq 1 ]; then
+  echo ""
+  echo "=============================================="
+  echo "⚠️ GitHub SSH Key Check (Required for MCM private repos)"
+  echo "=============================================="
+  read -p "Did you already add GitHub SSH key in this server? (y/n): " SSH_OK
+
+  if [[ "$SSH_OK" != "y" && "$SSH_OK" != "Y" ]]; then
+    echo ""
+    echo "❌ Aborting addon clone because SSH key is not configured."
+    echo "✅ Run this to create SSH key:"
+    echo 'ssh-keygen -t ed25519 -C "shameer@mcmwg.com"'
+    echo ""
+    echo "✅ Then add public key to GitHub:"
+    echo "cat ~/.ssh/id_ed25519.pub"
+    echo ""
+    exit 1
+  fi
+else
+  echo "✅ MCM repos already present. Skipping SSH check."
+fi
+
+# -------------------------------
+# 6) Clone addons safely (skip existing)
+# -------------------------------
+echo "✅ Cloning repositories (skips existing)..."
+
 declare -A REPOS=(
-    ["Cybrosys"]="https://github.com/CybroOdoo/CybroAddons https://github.com/CybroOdoo/OpenHRMS"
-    ["mcm"]="git@github.com:McMillan-Woods-Global/odoo_enterprise_addons.git git@github.com:McMillan-Woods-Global/mcm_gen_modules.git git@github.com:McMillan-Woods-Global/mcm_subscription_alert.git"
-    ["oca"]="https://github.com/OCA/account-financial-reporting https://github.com/OCA/account-financial-tools https://github.com/OCA/account-invoicing https://github.com/OCA/account-payment https://github.com/OCA/account-reconcile https://github.com/OCA/reporting-engine https://github.com/OCA/sale-workflow https://github.com/OCA/server-tools https://github.com/OCA/server-ux https://github.com/OCA/web"
-    ["odoo-mates"]="https://github.com/odoomates/odooapps"
-    ["others"]="https://github.com/muhlhel/myfree"
+  ["Cybrosys"]="https://github.com/CybroOdoo/CybroAddons https://github.com/CybroOdoo/OpenHRMS"
+  ["mcm"]="git@github.com:McMillan-Woods-Global/odoo_enterprise_addons.git git@github.com:McMillan-Woods-Global/mcm_gen_modules.git git@github.com:McMillan-Woods-Global/mcm_subscription_alert.git"
+  ["oca"]="https://github.com/OCA/account-financial-reporting https://github.com/OCA/account-financial-tools https://github.com/OCA/account-invoicing https://github.com/OCA/account-payment https://github.com/OCA/account-reconcile https://github.com/OCA/reporting-engine https://github.com/OCA/sale-workflow https://github.com/OCA/server-tools https://github.com/OCA/server-ux https://github.com/OCA/web"
+  ["odoo-mates"]="https://github.com/odoomates/odooapps"
+  ["others"]="https://github.com/muhlhel/myfree"
 )
 
 clone_repo() {
-    local repo="$1"
-    local repo_name
-    repo_name=$(basename "$repo" .git)
+  local repo="$1"
+  local repo_name
+  repo_name=$(basename "$repo" .git)
 
-    if [ -d "$repo_name" ]; then
-        echo "⚠️ Already exists, skipping: $repo_name"
-        return 0
-    fi
+  if [ -d "$repo_name" ]; then
+    echo "⚠️ Already exists, skipping: $repo_name"
+    return 0
+  fi
 
-    echo "⬇️ Cloning $repo_name (branch 19.0)..."
-    git clone -b 19.0 --single-branch "$repo"
+  echo "⬇️ Cloning: $repo_name (branch 19.0)"
+  git clone -b 19.0 --single-branch "$repo" || {
+    echo "⚠️ Branch 19.0 not found for $repo_name → cloning default branch..."
+    git clone "$repo"
+  }
 }
 
 for category in "${!REPOS[@]}"; do
-    echo "📁 Creating folder: $category"
-    mkdir -p "$category"
-    cd "$category" || exit 1
+  mkdir -p "$category"
+  cd "$category" || exit 1
 
-    for repo in ${REPOS[$category]}; do
-        clone_repo "$repo"
-    done
+  for repo in ${REPOS[$category]}; do
+    clone_repo "$repo"
+  done
 
-    cd ..
+  cd ..
 done
 
-echo "✅ All repositories cloned successfully!"
+echo "✅ Addons cloning completed."
 
 # -------------------------------
-# 7) Start Containers
+# 7) Start / Verify containers (safe)
 # -------------------------------
-echo "✅ Starting Odoo 19 containers..."
 cd "$BASE_DIR" || exit 1
-docker-compose up -d
 
-PUBLIC_IP=$(ip -4 route get 1.1.1.1 | awk '{print $7}')
+if docker ps --format '{{.Names}}' | grep -q "^${ODOO_CONTAINER}$"; then
+  echo "✅ ${ODOO_CONTAINER} is already running. Skipping docker-compose up."
+else
+  echo "✅ Starting containers..."
+  docker-compose up -d
+fi
 
 echo "=============================================="
-echo "✅ DONE! Odoo 19 is running"
-echo "✅ Detected Server IP: ${PUBLIC_IP}"
+echo "✅ DONE ✅ Odoo 19 is ready"
 echo "🌐 Open: http://${PUBLIC_IP}:${ODOO_PORT}"
-echo "📌 Logs: docker logs -f odoo19-web"
+echo "📌 Logs: docker logs -f ${ODOO_CONTAINER}"
 echo "=============================================="
