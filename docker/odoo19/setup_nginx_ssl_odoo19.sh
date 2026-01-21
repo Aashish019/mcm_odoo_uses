@@ -19,8 +19,30 @@ echo "✅ MCM Setup: Nginx + UFW + SSL + Basic Auth"
 echo "Domain : $DOMAIN"
 echo "Email  : $EMAIL"
 echo "Ports  : Odoo=$ODOO_PORT  Chat=$CHAT_PORT"
-echo "Auth   : $AUTH_USER / $AUTH_PASS"
 echo "=============================================="
+echo ""
+
+# -------------------------------
+# ✅ DNS Confirmation (Your Requirement)
+# -------------------------------
+read -p "❓ Did you add your SERVER IP in Linode DNS (A record) for $DOMAIN ? (y/n): " DNS_OK
+
+if [[ "$DNS_OK" != "y" && "$DNS_OK" != "Y" ]]; then
+  echo ""
+  echo "❌ Aborted!"
+  echo "✅ Please add the A record in Linode DNS first:"
+  echo "   Type : A"
+  echo "   Host : $DOMAIN"
+  echo "   Value: <YOUR_SERVER_IP>"
+  echo ""
+  echo "✅ Then run again:"
+  echo "   ./$0 $DOMAIN"
+  exit 1
+fi
+
+echo ""
+echo "✅ DNS confirmed. Continuing setup..."
+echo ""
 
 # -------------------------------
 # 1) Install Nginx + UFW
@@ -83,7 +105,7 @@ server {
         proxy_pass http://odoo;
     }
 
-    # Secure DB Manager
+    # Secure Odoo Database Manager
     location /web/database/manager {
         auth_basic "Zone protege";
         auth_basic_user_file /etc/nginx/.htpasswd;
@@ -91,12 +113,12 @@ server {
         proxy_pass http://odoo;
     }
 
-    # Longpolling (your usual)
+    # Longpolling
     location /longpolling {
         proxy_pass http://odoochat;
     }
 
-    # Websocket (recommended for Odoo 16+)
+    # Websocket (recommended)
     location /websocket {
         proxy_pass http://odoochat;
         proxy_http_version 1.1;
@@ -116,7 +138,7 @@ EOF
 # 5) Enable site + remove default
 # -------------------------------
 sudo ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
+sudo rm -f /etc/nginx/sites-enabled/default || true
 
 # -------------------------------
 # 6) Enable server_names_hash_bucket_size 64;
@@ -126,7 +148,6 @@ NGINX_MAIN="/etc/nginx/nginx.conf"
 if grep -q "^[# ]*server_names_hash_bucket_size" "$NGINX_MAIN"; then
   sudo sed -i 's/^[# ]*server_names_hash_bucket_size.*/server_names_hash_bucket_size 64;/' "$NGINX_MAIN"
 else
-  # add inside http block
   sudo sed -i '/http {/a \    server_names_hash_bucket_size 64;' "$NGINX_MAIN"
 fi
 
