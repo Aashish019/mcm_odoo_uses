@@ -189,8 +189,11 @@ echo "✅ Starting Odoo 17 containers..."
 cd "$BASE_DIR" || exit 1
 docker-compose up -d
 
+PUBLIC_IP=$(ip -4 route get 1.1.1.1 | awk '{print $7}')
+
 echo "=============================================="
 echo "✅ DONE! Odoo 17 is running"
-echo "🌐 Open: http://YOUR_SERVER_IP:${ODOO_PORT}"
+echo "✅ Detected Server IP: ${PUBLIC_IP}"
+echo "🌐 Open: http://${PUBLIC_IP}:${ODOO_PORT}"
 echo "📌 Logs: docker logs -f odoo17-web"
 echo "=============================================="
