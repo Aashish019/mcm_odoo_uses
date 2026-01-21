@@ -5,8 +5,8 @@ DOMAIN="$1"
 EMAIL="mcmillandomains@gmail.com"
 
 # ✅ Odoo 17 default ports (your usual)
-ODOO_PORT="4001"
-CHAT_PORT="4002"
+ODOO_PORT="8069"
+CHAT_PORT="8072"
 
 AUTH_USER="admin"
 AUTH_PASS="Master@nginx#17"
