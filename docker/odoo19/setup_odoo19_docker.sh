@@ -164,7 +164,7 @@ proxy_mode = True
 longpolling_port = 8072
 ;gevent_port = False
 
-addons_path = /usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons/mcm/mcmillan_internal_addons,/mnt/extra-addons/mcm/mcm_gen_modules,/mnt/extra-addons/oca/web,/mnt/extra-addons/odoo-mates,/mnt/extra-addons/mcm/odoo_enterprise_addons,/mnt/extra-addons/Cybrosys/CybroAddons,/mnt/extra-addons/Cybrosys/OpenHRMS,/mnt/extra-addons/mcm/mcm_subscription_alert
+addons_path = /usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons/Cybrosys/CybroAddons,/mnt/extra-addons/Cybrosys/OpenHRMS,/mnt/extra-addons/mcm/mcm_gen_modules,/mnt/extra-addons/mcm/mcm_subscription_alert,/mnt/extra-addons/mcm/odoo_enterprise_addons,/mnt/extra-addons/oca/account-financial-reporting,/mnt/extra-addons/oca/account-financial-tools,/mnt/extra-addons/oca/account-invoicing,/mnt/extra-addons/oca/account-payment,/mnt/extra-addons/oca/account-reconcile,/mnt/extra-addons/oca/reporting-engine,/mnt/extra-addons/oca/sale-workflow,/mnt/extra-addons/oca/server-tools,/mnt/extra-addons/oca/server-ux,/mnt/extra-addons/oca/web,/mnt/extra-addons/odoo-mates/odooapps,/mnt/extra-addons/others/myfree
 
 workers = 2
 max_cron_threads = 1
