@@ -64,6 +64,22 @@ else
 fi
 
 # -------------------------------
+# ✅ Fail2ban (SSH brute-force protection)
+# -------------------------------
+if ! command_exists fail2ban-client; then
+  echo "📦 Installing Fail2ban..."
+  install_if_missing fail2ban
+  sudo systemctl enable --now fail2ban
+else
+  echo "✅ Fail2ban already installed. Skipping..."
+  sudo systemctl enable --now fail2ban >/dev/null 2>&1 || true
+fi
+
+echo "✅ Fail2ban status:"
+sudo systemctl status fail2ban --no-pager || true
+
+
+# -------------------------------
 # 2) Create folder structure (safe)
 # -------------------------------
 echo "✅ Ensuring folder structure exists..."
