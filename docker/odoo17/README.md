@@ -70,4 +70,75 @@ Run the script by passing your domain name:
 ```
 
 
+---
 
+# ✅ Step 3: Initialize/Update Odoo Database
+
+After the setup is complete, you need to initialize or update your Odoo database and modules.
+
+## 3.1 Create a new database and install all modules
+
+```bash
+docker exec -it odoo17-web odoo \
+  -d KBG \
+  -i base \
+  --db_host=db \
+  --db_user=odoo \
+  --db_password=odoo \
+  --without-demo=all \
+  --stop-after-init
+```
+
+Replace `KBG` with your desired database name.
+
+## 3.2 Update all modules in an existing database
+
+```bash
+docker exec -it odoo17-web odoo \
+  -d KBG \
+  -u all \
+  --db_host=db \
+  --db_user=odoo \
+  --db_password=odoo \
+  --no-http \
+  --stop-after-init
+```
+
+
+---
+
+## 📝 Useful Docker Commands
+
+**View running containers:**
+```bash
+docker ps
+```
+
+**View Odoo logs:**
+```bash
+docker logs -f odoo17-web
+```
+
+**Restart Odoo:**
+```bash
+docker restart odoo17-web
+```
+
+**Stop all services:**
+```bash
+docker-compose down
+```
+
+**Start all services:**
+```bash
+docker-compose up -d
+```
+
+---
+
+
+---
+
+## 📄 License
+
+This setup guide is provided as-is for McMillan solutions deployment.
