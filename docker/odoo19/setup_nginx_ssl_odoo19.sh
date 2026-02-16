@@ -103,7 +103,7 @@ server {
     listen 80;
     server_name ${DOMAIN} www.${DOMAIN};
 
-    client_max_body_size 20M;
+    client_max_body_size 50M;
 
     proxy_read_timeout 720s;
     proxy_connect_timeout 720s;
