@@ -1,0 +1,212 @@
+// ========== ODOO CONFIGURATION - UPDATE THESE ==========
+const ODOO_URL = 'https://boards.mcmillan.solutions'; // Your Odoo URL (without trailing slash)
+const ODOO_DB = 'boards_init'; // Your database name
+const ODOO_USERNAME = 'aashishanilmcmillan@gmail.com'; // Your Odoo login email
+const ODOO_PASSWORD = '123'; // Your Odoo password
+// =======================================================
+
+function createEODReportDraft() {
+  // Get today's date
+  var today = new Date();
+  var dateString = Utilities.formatDate(today, Session.getScriptTimeZone(), "MM/dd/yyyy");
+  
+  // Define the subject
+  var subject = "EOD Report (" + dateString + ") - Aashish Anil - DevOps - IT";
+  
+  // Get tasks from Odoo with time logged today
+  var tasksWithTime = getOdooTasksWithTimeToday();
+  
+  // Build completed tasks list
+  var completedTasksHtml = "";
+  if (tasksWithTime && tasksWithTime.length > 0) {
+    tasksWithTime.forEach(function(item) {
+      var projectName = item.project_name || 'No Project';
+      var taskName = item.task_name || 'No Task';
+      var timeSpent = item.time_spent || 0;
+      
+      // Format time (convert decimal hours to hours:minutes)
+      var hours = Math.floor(timeSpent);
+      var minutes = Math.round((timeSpent - hours) * 60);
+      var timeFormatted = hours + ":" + (minutes < 10 ? "0" + minutes : minutes);
+      
+      completedTasksHtml += "<li>" + taskName + " " + timeFormatted + "</li>";
+    });
+  } else {
+    // Fallback if no tasks found or Odoo connection fails
+    completedTasksHtml = "<li>MCM - Internal DevOps support 3:53</li>";
+  }
+  
+  // Define the body with HTML for bullet points
+  var body = "Hi,<br><br>" +
+             "The following is my EOD report for today.<br><br>" +
+             "The following are my completed tasks:<br>" +
+             "<ul>" +
+             completedTasksHtml +
+             "</ul><br>" +
+             "The following are my to-dos for tomorrow:<br><br>" +
+             "Please let me know if you have any questions or concerns.<br>";
+  
+  // Define the recipient
+  var to = "shaheer@mcmillanglobal.com, hr@mcmwg.com";
+  
+  // Create the draft email with HTML body
+  GmailApp.createDraft(to, subject, "", { htmlBody: body });
+  
+  Logger.log("EOD Report draft created successfully!");
+}
+
+// ========== ODOO INTEGRATION FUNCTIONS ==========
+
+function authenticateOdoo() {
+  try {
+    const url = ODOO_URL + '/jsonrpc';
+    
+    const payload = {
+      jsonrpc: '2.0',
+      method: 'call',
+      params: {
+        service: 'common',
+        method: 'authenticate',
+        args: [ODOO_DB, ODOO_USERNAME, ODOO_PASSWORD, {}]
+      },
+      id: Math.floor(Math.random() * 1000000)
+    };
+    
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+    
+    const response = UrlFetchApp.fetch(url, options);
+    const result = JSON.parse(response.getContentText());
+    
+    if (result.result) {
+      Logger.log('Odoo authentication successful');
+      return result.result;
+    } else {
+      Logger.log('Odoo authentication failed: ' + response.getContentText());
+      return null;
+    }
+  } catch (error) {
+    Logger.log('Error authenticating with Odoo: ' + error.toString());
+    return null;
+  }
+}
+
+
+
+function getOdooTasksWithTimeToday() {
+  try {
+    const uid = authenticateOdoo();
+    
+    if (!uid) {
+      Logger.log('Cannot fetch tasks - authentication failed');
+      return null;
+    }
+    
+    const url = ODOO_URL + '/jsonrpc';
+    
+    // Get today's date
+    const today = new Date();
+    const todayStart = Utilities.formatDate(today, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    
+    // First, get timesheet entries for today
+    const payload = {
+      jsonrpc: '2.0',
+      method: 'call',
+      params: {
+        service: 'object',
+        method: 'execute_kw',
+        args: [
+          ODOO_DB,
+          uid,
+          ODOO_PASSWORD,
+          'account.analytic.line', // Timesheet model in Odoo
+          'search_read',
+          [
+            [
+              ['user_id', '=', uid], // Your timesheets
+              ['date', '=', todayStart], // Today's date
+              ['project_id', '!=', false] // Has a project (filters out non-project timesheets)
+            ]
+          ],
+          {
+            fields: ['name', 'task_id', 'project_id', 'unit_amount'],
+            limit: 100,
+            order: 'id desc'
+          }
+        ]
+      },
+      id: Math.floor(Math.random() * 1000000)
+    };
+    
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+    
+    const response = UrlFetchApp.fetch(url, options);
+    const result = JSON.parse(response.getContentText());
+    
+    if (result.result && result.result.length > 0) {
+      Logger.log('Found ' + result.result.length + ' timesheet entries from Odoo');
+      
+      // Group by task and sum hours
+      var taskMap = {};
+      
+      result.result.forEach(function(entry) {
+        var taskId = entry.task_id ? entry.task_id[0] : 'no_task';
+        var taskName = entry.task_id ? entry.task_id[1] : entry.name;
+        var projectName = entry.project_id ? entry.project_id[1] : 'No Project';
+        var hours = entry.unit_amount || 0;
+        
+        var key = taskId + '_' + projectName;
+        
+        if (taskMap[key]) {
+          taskMap[key].time_spent += hours;
+        } else {
+          taskMap[key] = {
+            task_name: taskName,
+            project_name: projectName,
+            time_spent: hours
+          };
+        }
+      });
+      
+      // Convert map to array
+      var tasksArray = [];
+      for (var key in taskMap) {
+        tasksArray.push(taskMap[key]);
+      }
+      
+      Logger.log('Grouped into ' + tasksArray.length + ' unique tasks');
+      return tasksArray;
+      
+    } else {
+      Logger.log('No timesheet entries found for today');
+      return null;
+    }
+  } catch (error) {
+    Logger.log('Error fetching timesheets from Odoo: ' + error.toString());
+    return null;
+  }
+}
+
+function doGet() {
+  createEODReportDraft();
+  
+  // Return a nice confirmation message
+  var html = '<html><body style="font-family: Arial; padding: 40px; text-align: center;">' +
+             '<h2 style="color: #4CAF50;">✅ Success!</h2>' +
+             '<p>Your EOD Report draft has been created.</p>' +
+             '<p>Check your Gmail drafts.</p>' +
+             '<br><br>' +
+             '<a href="https://mail.google.com/mail/#drafts" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Open Gmail Drafts</a>' +
+             '</body></html>';
+  
+  return HtmlService.createHtmlOutput(html);
+}
